@@ -152,6 +152,57 @@
 			// String - Colour behind the legend colour block
 			multiTooltipKeyBackground: '#fff',
 
+			// Boolean - Whether to draw title on the canvas or not
+			showTitle: false,
+
+			// String - Title text
+			titleText: "",
+
+			// String - Title font declaration
+			titleFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+
+			// Number - Title font size in pixels
+			titleFontSize: 30,
+
+			// String - Title font weight style
+			titleFontStyle: "normal",
+
+			// String - Title font colour
+			titleFontColor: "#333",
+
+			// Boolean - Whether to draw legend on the canvas or not
+			showLegend: false,
+
+			// String - Where to draw legend on the canvas
+			legendPosition: "bottom",
+
+			// Boolean - whether the legend has a board or not
+			legendBoard : false,
+
+			// Number - Pixel radius of the legend border
+			legendCornerRadius: 6,
+
+			// String - Legend font colour
+			legendColor: "#999",
+
+			// Number - Pixel width of padding around legend text
+			legendXPadding: 6,
+
+			// Number - Pixel width of padding around legend text
+			legendYPadding: 6,
+
+			// String - Legend font declaration
+			legendFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+
+			// Number - Legend font size in pixels
+			legendFontSize: 14,
+
+			// String - Legend font weight style
+			legendFontStyle: "normal",
+
+			// String - Legend font colour
+			legendFontColor: "#333",
+
 			// Function - Will fire on animation progression.
 			onAnimationProgress: function(){},
 
@@ -868,6 +919,46 @@
 			unbindEvents(this, this.events);
 			delete Chart.instances[this.id];
 		},
+		buildTitle : function() {
+			this.title = new Chart.Title({
+				showTitle: this.options.showTitle,
+				fontStyle: this.options.titleFontStyle,
+				fontSize: this.options.titleFontSize,
+				fontFamily: this.options.titleFontFamily,
+				fontColor: this.options.titleFontColor,
+				titleText: this.options.titleText,
+				ctx: this.chart.ctx,
+				height: this.chart.height,
+				width: this.chart.width
+			});
+		},
+		buildLegend : function(datasets){
+			var labels = [],
+				legendColors = [];
+			helpers.each(datasets, function(dataset) {
+				labels.push(dataset.label);
+				legendColors.push(dataset.fillColor);
+			});
+			this.legend = new Chart.Legend({
+				showLegend: this.options.showLegend,
+				legendPosition: this.options.legendPosition,
+				legendBoard: this.options.legendBoard,
+				ctx: this.chart.ctx,
+				chart: this.chart,
+				chartHeight: this.chart.height,
+				chartWidth: this.chart.width,
+				fillColor: this.options.legendColor,
+				fontFamily: this.options.legendFontFamily,
+				fontSize: this.options.legendFontSize,
+				fontStyle: this.options.legendFontStyle,
+				fontColor: this.options.legendFontColor,
+				xPadding: this.options.legendXPadding,
+				yPadding: this.options.legendYPadding,
+				cornerRadius: this.options.legendCornerRadius,
+				labels: labels,
+				legendColors: legendColors
+			});
+		},
 		showTooltip : function(ChartElements, forceRedraw){
 			// Only redraw the chart if we've actually changed what we're hovering on.
 			if (typeof this.activeElements === 'undefined') this.activeElements = [];
@@ -1435,6 +1526,12 @@
 			this.startPoint += this.padding;
 			this.endPoint -= this.padding;
 
+			// For show title
+			this.startPoint += this.titleHeight;
+
+			// For show legend
+			this.width -= this.legendWidth;
+
 			// Cache the starting height, so can determine if we need to recalculate the scale yAxis
 			var cachedHeight = this.endPoint - this.startPoint,
 				cachedYLabelWidth;
@@ -1469,7 +1566,6 @@
 					this.calculateXLabelRotation();
 				}
 			}
-
 		},
 		calculateXLabelRotation : function(){
 			//Get the width of each grid by calculating the difference
@@ -1903,6 +1999,87 @@
 					}
 				}
 			}
+		}
+	});
+
+	Chart.Title = Chart.Element.extend({
+		initialize : function(){
+			this.fit();
+		},
+		fit : function(){
+			this.xStart = (this.showTitle) ? this.width / 2 : 0;
+			this.yStart = (this.showTitle) ? this.fontSize : 0;
+		},
+		draw : function(){
+			if (!this.showTitle){
+				return;
+			}
+			var ctx = this.ctx;
+			ctx.font = fontString(this.fontSize, this.fontStyle, this.fontFamily);
+			ctx.fillStyle = this.fontColor;
+			ctx.textAlign = "center";
+			ctx.textBaseline = "bottom";
+			ctx.fillText(this.titleText, this.xStart, this.yStart);
+		}
+	});
+
+	Chart.Legend = Chart.Element.extend({
+		initialize : function(){
+			this.fit();
+		},
+		fit : function(){
+			this.height = (this.labels.length * this.fontSize) + ((this.labels.length-1) * (this.fontSize/2)) + (this.yPadding*2);
+			
+			this.font = fontString(this.fontSize, this.fontStyle, this.fontFamily);
+			var longestTextWidth = longestText(this.ctx, this.font, this.labels) + this.fontSize + 3;
+			this.width = longestTextWidth + (this.xPadding*2);
+
+			// find legend position
+			this.xStart = (this.showLegend) ? this.chartWidth : 0;
+			this.yStart = (this.showLegend) ? this.height : 0;
+			this.xStart = this.xStart - this.width;
+
+			var halfHeight = this.height/2;
+
+			//Check to ensure the height will fit on the canvas
+			//The three is to buffer form the very
+			if (this.yStart - halfHeight < 0 ){
+				this.yStart = halfHeight;
+			} else if (this.yStart + halfHeight > this.chart.height){
+				this.yStart = this.chart.height - halfHeight;
+			}
+		},
+		getLineHeight : function(index){
+			var baseLineHeight = this.yStart - (this.height/2) + this.yPadding,
+				afterTitleIndex = index-1;
+			return baseLineHeight + ((this.fontSize*1.5*afterTitleIndex));
+		},
+		draw : function(){
+			if (!this.showLegend){
+				return;
+			}
+
+			var ctx = this.ctx;
+			if (this.legendBoard) {
+				drawRoundedRectangle(this.ctx,this.xStart,this.yStart - this.height/2,this.width,this.height,this.cornerRadius);
+			}
+			ctx.fillStyle = this.fillColor;
+			ctx.fill();
+			ctx.closePath();
+
+			ctx.textAlign = "left";
+			ctx.textBaseline = "middle";
+			ctx.font = this.font;
+			helpers.each(this.labels,function(label,index){
+				ctx.fillStyle = this.fontColor;
+				ctx.fillText(label,this.xStart + this.xPadding + this.fontSize + 3, this.yStart + this.getLineHeight(index-1));
+
+				ctx.fillStyle = this.legendColors[index];
+				ctx.fillRect(this.xStart + this.xPadding, this.getLineHeight(index+1) + this.yPadding - this.fontSize/2, this.fontSize, this.fontSize);
+
+				ctx.fillStyle = this.legendColors[index];
+				ctx.fillRect(this.xStart + this.xPadding, this.getLineHeight(index+1) + this.yPadding - this.fontSize/2, this.fontSize, this.fontSize);
+			},this);
 		}
 	});
 

@@ -67,6 +67,7 @@
 			});
 
 			this.datasets = [];
+			this.labelValues = [];
 
 			//Set up tooltip events on the chart
 			if (this.options.showTooltips){
@@ -93,6 +94,7 @@
 
 			//Iterate through each of the datasets, and build this into a property of the chart
 			helpers.each(data.datasets,function(dataset,datasetIndex){
+				this.labelValues.push(dataset.label);
 
 				var datasetObject = {
 					label : dataset.label || null,
@@ -118,6 +120,8 @@
 
 			},this);
 
+			this.buildTitle();
+
 			this.buildScale(data.labels);
 
 			this.BarClass.prototype.base = this.scale.endPoint;
@@ -130,6 +134,8 @@
 				});
 				bar.save();
 			}, this);
+
+			this.buildLegend(data.datasets);
 
 			this.render();
 		},
@@ -180,6 +186,9 @@
 				return values;
 			};
 
+			var longestTextWidth = helpers.longestText(this.chart.ctx, helpers.fontString(this.options.legendFontSize, this.options.legendFontStyle, this.options.legendFontFamily), this.labelValues) + this.options.legendFontSize + 3;
+			var legendWidth = longestTextWidth + (this.options.legendXPadding*2);
+
 			var scaleOptions = {
 				templateString : this.options.scaleLabel,
 				height : this.chart.height,
@@ -210,7 +219,9 @@
 				gridLineColor : (this.options.scaleShowGridLines) ? this.options.scaleGridLineColor : "rgba(0,0,0,0)",
 				padding : (this.options.showScale) ? 0 : (this.options.barShowStroke) ? this.options.barStrokeWidth : 0,
 				showLabels : this.options.scaleShowLabels,
-				display : this.options.showScale
+				display : this.options.showScale,
+				titleHeight : this.options.showTitle ? this.options.titleFontSize : 0,
+				legendWidth : this.options.showLegend ? legendWidth : 0
 			};
 
 			if (this.options.scaleOverride){
@@ -270,6 +281,8 @@
 
 			var ctx = this.chart.ctx;
 
+			this.title.draw();
+
 			this.scale.draw(easingDecimal);
 
 			//Draw all the bars for each dataset
@@ -287,6 +300,7 @@
 				},this);
 
 			},this);
+			this.legend.draw();
 		}
 	});
 
