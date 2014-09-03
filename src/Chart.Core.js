@@ -2050,9 +2050,8 @@
 			}
 		},
 		getLineHeight : function(index){
-			var baseLineHeight = this.yStart - (this.height/2) + this.yPadding,
-				afterTitleIndex = index-1;
-			return baseLineHeight + ((this.fontSize*1.5*afterTitleIndex));
+			var baseLineHeight = this.yStart - (this.height/2) + this.yPadding
+			return baseLineHeight + (this.fontSize*1.5*index);
 		},
 		draw : function(){
 			if (!this.showLegend){
@@ -2072,13 +2071,10 @@
 			ctx.font = this.font;
 			helpers.each(this.labels,function(label,index){
 				ctx.fillStyle = this.fontColor;
-				ctx.fillText(label,this.xStart + this.xPadding + this.fontSize + 3, this.yStart + this.getLineHeight(index-1));
-
+				ctx.fillText(label,this.xStart + this.xPadding + this.fontSize + 3, this.getLineHeight(index+1) - this.fontSize);
+				
 				ctx.fillStyle = this.legendColors[index];
-				ctx.fillRect(this.xStart + this.xPadding, this.getLineHeight(index+1) + this.yPadding - this.fontSize/2, this.fontSize, this.fontSize);
-
-				ctx.fillStyle = this.legendColors[index];
-				ctx.fillRect(this.xStart + this.xPadding, this.getLineHeight(index+1) + this.yPadding - this.fontSize/2, this.fontSize, this.fontSize);
+				ctx.fillRect(this.xStart + this.xPadding, this.getLineHeight(index) + this.yPadding - this.fontSize/2, this.fontSize, this.fontSize);
 			},this);
 		}
 	});

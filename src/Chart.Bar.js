@@ -85,10 +85,16 @@
 				});
 			}
 
+			this.barNeedRotation = false;
+			if (this.options.scaleOverride && this.options.scaleStartValue < 0) {
+				this.barNeedRotation = true;
+			}
+
 			//Declare the extension of the default point, to cater for the options passed in to the constructor
 			this.BarClass = Chart.Rectangle.extend({
 				strokeWidth : this.options.barStrokeWidth,
 				showStroke : this.options.barShowStroke,
+				barNeedRotation : this.barNeedRotation,
 				ctx : this.chart.ctx
 			});
 
@@ -290,6 +296,10 @@
 				helpers.each(dataset.bars,function(bar,index){
 					if (bar.hasValue()){
 						bar.base = this.scale.endPoint;
+						if (this.barNeedRotation) {
+							// Need to rotate to another direct
+							// ctx.rotate(-Math.PI/2);
+						}
 						//Transition then draw
 						bar.transition({
 							x : this.scale.calculateBarX(this.datasets.length, datasetIndex, index),
