@@ -41,7 +41,7 @@
 
 
 	Chart.Type.extend({
-		name: "Bar",
+		name: "Stackedbar",
 		defaults : defaultConfig,
 		initialize:  function(data){
 
@@ -130,20 +130,37 @@
 			this.BarClass.prototype.base = this.calculateNegative();
 
 			this.eachBars(function(bar, index, datasetIndex){
+				bar.base +=this.calculateStacked(datasetIndex, index);
 				helpers.extend(bar, {
 					width : this.scale.calculateBarWidth(this.datasets.length),
-					x: this.scale.calculateBarX(this.datasets.length, datasetIndex, index),
-					y: this.calculateNegative()
+					x: this.scale.calculateBarX(this.datasets.length, 0, index),
+					y: this.calculateNegative() + this.calculateStacked(datasetIndex, index)
 				});
 				bar.save();
 			}, this);
 
-			this.buildLegend(data.datasets);
+			var datasets = [];
+			helpers.each(data.datasets, function(dataset, index) {
+				datasets[data.datasets.length - 1 - index] = dataset;
+			})
+			this.buildLegend(datasets);
 
 			this.render();
 		},
 		calculateNegative : function() {
 			return this.options.showNegative ? this.scale.calculateY(0) : this.scale.endPoint;
+		},
+		calculateStacked : function(datasetIndex, barIndex) {
+			if (datasetIndex === 0)
+				return 0;
+			var stackedValue = 0;
+			for (var i = 0; i < datasetIndex; i++) {
+				var bar = this.datasets[i].bars[barIndex];
+				if (bar.hasValue()) {
+					stackedValue += bar.value;
+				}
+			}
+			return this.scale.calculateY(stackedValue);
 		},
 		update : function(){
 			this.scale.update();
@@ -249,7 +266,7 @@
 				this.datasets[datasetIndex].bars.push(new this.BarClass({
 					value : value,
 					label : label,
-					x: this.scale.calculateBarX(this.datasets.length, datasetIndex, this.scale.valuesCount+1),
+					x: this.scale.calculateBarX(this.datasets.length, 0, this.scale.valuesCount+1),
 					y: this.calculateNegative(),
 					width : this.scale.calculateBarWidth(this.datasets.length),
 					base : this.scale.endPoint,
@@ -298,8 +315,8 @@
 						bar.base = this.calculateNegative();
 						//Transition then draw
 						bar.transition({
-							x : this.scale.calculateBarX(this.datasets.length, datasetIndex, index),
-							y : this.scale.calculateY(bar.value),
+							x : this.scale.calculateBarX(this.datasets.length, 0, index),
+							y : this.scale.calculateY(bar.value) + this.calculateStacked(datasetIndex, index),
 							width : this.scale.calculateBarWidth(this.datasets.length)
 						}, easingDecimal).draw();
 					}
