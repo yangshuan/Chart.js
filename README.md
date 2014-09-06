@@ -1,6 +1,10 @@
 # Chart.js
 
-*Simple HTML5 Charts using the canvas element* [chartjs.org](http://www.chartjs.org)
+This is forked from (https://github.com/nnnick/Chart.js), need send PR to original repository.
+
+## What's difference:
+- Added stacked bar.
+- Added legend and title.
 
 ## Documentation
 
