@@ -19,6 +19,8 @@
 		//Number - Width of the grid lines
 		scaleGridLineWidth : 1,
 
+		tooltipTemplate: "<%for (var i = 0; i < labels.length; i++){%><%=labels[i]%>: <%}%><%= values[i] %>",
+
 		//Boolean - If there is a stroke on each bar
 		barShowStroke : true,
 
@@ -31,14 +33,66 @@
 		//Number - Spacing between data sets within X values
 		barDatasetSpacing : 1,
 
-		//Boolean - Whether to show negative bar
-		showNegative : false,
-
 		//String - A legend template
 		legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].fillColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>"
 
 	};
 
+	Chart.StackedBar = Chart.Element.extend({
+		draw: function() {
+			var ctx = this.ctx,
+				halfWidth = this.width/2,
+				leftX = this.x - halfWidth,
+				rightX = this.x + halfWidth,
+				top = this.top,
+				halfStroke = this.strokeWidth / 2;
+
+			// Canvas doesn't allow us to stroke inside the width so we can
+			// adjust the sizes to fit if we're setting a stroke on the line
+			if (this.showStroke){
+				leftX += halfStroke;
+				rightX -= halfStroke;
+				for (var i = 0; i < this.tops.length; i++) {
+					tops[i] += halfStroke;
+				}
+			}
+
+			ctx.beginPath();
+
+			for (var i = 0; i < this.values.length; i++) {
+				ctx.fillStyle = this.fillColors[i];
+				ctx.strokeStyle = this.strokeColors[i];
+				ctx.lineWidth = this.lineWidth;
+
+				ctx.beginPath();
+				ctx.moveTo(leftX, this.bases[i]);
+				ctx.lineTo(leftX, this.tops[i]);
+				ctx.lineTo(rightX, this.tops[i]);
+				ctx.lineTo(rightX, this.bases[i]);
+				ctx.fill();
+				ctx.closePath();
+				if (this.showStroke) {
+					ctx.stroke();
+				}
+			}
+		},
+		getOffsetValue: function(valueIndex) {
+			var offset = 0;
+			for (var i = 0; i < valueIndex; i++) {
+				offset += this.values[i];
+			}
+			return offset;
+		},
+		hasValue: function() {
+			if (this.values.length > 0) {
+				return true;
+			}
+			return false;
+		},
+		inRange : function(chartX,chartY,isNegative){
+			return (chartX >= this.x - this.width/2 && chartX <= this.x + this.width/2) && ((chartY >= this.tops[this.tops.length - 1] && chartY <= this.bases[0]) || (isNegative && chartY <= this.tops[this.tops.length - 1] && chartY >= this.bases[0]));
+		}
+	});
 
 	Chart.Type.extend({
 		name: "Stackedbar",
@@ -75,21 +129,72 @@
 			//Set up tooltip events on the chart
 			if (this.options.showTooltips){
 				helpers.bindEvents(this, this.options.tooltipEvents, function(evt){
-					var activeBars = (evt.type !== 'mouseout') ? this.getBarsAtEvent(evt) : [];
-
-					this.eachBars(function(bar){
+					var activeBar = (evt.type !== 'mouseout') ? this.getBarAtEvent(evt) : [];
+					if (!activeBar || activeBar.length === 0) {
+						this.draw();
+						return;
+					}
+					helpers.each(this.bars, function(bar){
 						bar.restore(['fillColor', 'strokeColor']);
 					});
-					helpers.each(activeBars, function(activeBar){
-						activeBar.fillColor = activeBar.highlightFill;
-						activeBar.strokeColor = activeBar.highlightStroke;
-					});
-					this.showTooltip(activeBars);
+					var tooltipLabels = [],
+						tooltipColors = [],
+						medianPosition = (function() {
+							var xMax,
+								yMax,
+								xMin,
+								yMin;
+							yMin = activeBar.bases[0];
+							yMax = activeBar.tops[activeBar.tops.length - 1];
+
+							xMin = activeBar.x - activeBar.width / 2;
+							xMax = activeBar.x + activeBar.width / 2;
+							return {
+								x: (xMin > this.chart.width/2) ? xMin : xMax,
+								y: (yMin + yMax)/2
+							};
+						}).call(this);
+					activeBar.fillColor = activeBar.highlightFill;
+					activeBar.strokeColor = activeBar.highlightStroke;
+					//Include any colour information about the element
+					helpers.each(activeBar.values, function(value, index) {
+						var mockObj = {
+							value: value
+						};
+						tooltipLabels.push(helpers.template(this.options.multiTooltipTemplate, mockObj));
+						tooltipColors.push({
+							fill: activeBar.fillColors[index],
+							stroke: activeBar.strokeColors[index]
+						});
+					}, this);
+					new Chart.MultiTooltip({
+						x: medianPosition.x,
+						y: medianPosition.y,
+						xPadding: this.options.tooltipXPadding,
+						yPadding: this.options.tooltipYPadding,
+						xOffset: this.options.tooltipXOffset,
+						fillColor: this.options.tooltipFillColor,
+						textColor: this.options.tooltipFontColor,
+						fontFamily: this.options.tooltipFontFamily,
+						fontStyle: this.options.tooltipFontStyle,
+						fontSize: this.options.tooltipFontSize,
+						titleTextColor: this.options.tooltipTitleFontColor,
+						titleFontFamily: this.options.tooltipTitleFontFamily,
+						titleFontStyle: this.options.tooltipTitleFontStyle,
+						titleFontSize: this.options.tooltipTitleFontSize,
+						cornerRadius: this.options.tooltipCornerRadius,
+						labels: tooltipLabels,
+						legendColors: tooltipColors,
+						legendColorBackground : this.options.multiTooltipKeyBackground,
+						title: activeBar.label,
+						chart: this.chart,
+						ctx: this.chart.ctx
+					}).draw();
 				});
 			}
 
 			//Declare the extension of the default point, to cater for the options passed in to the constructor
-			this.BarClass = Chart.Rectangle.extend({
+			this.BarClass = Chart.StackedBar.extend({
 				strokeWidth : this.options.barStrokeWidth,
 				showStroke : this.options.barShowStroke,
 				ctx : this.chart.ctx
@@ -98,30 +203,35 @@
 			//Iterate through each of the datasets, and build this into a property of the chart
 			helpers.each(data.datasets,function(dataset,datasetIndex){
 				this.labelValues.push(dataset.label);
-
-				var datasetObject = {
-					label : dataset.label || null,
-					fillColor : dataset.fillColor,
-					strokeColor : dataset.strokeColor,
-					bars : []
-				};
-
-				this.datasets.push(datasetObject);
-
-				helpers.each(dataset.data,function(dataPoint,index){
-					//Add a new point for each piece of data, passing any required data to draw.
-					datasetObject.bars.push(new this.BarClass({
-						value : dataPoint,
-						label : data.labels[index],
-						datasetLabel: dataset.label,
-						strokeColor : dataset.strokeColor,
-						fillColor : dataset.fillColor,
-						highlightFill : dataset.highlightFill || dataset.fillColor,
-						highlightStroke : dataset.highlightStroke || dataset.strokeColor
-					}));
-				},this);
-
 			},this);
+
+			this.bars = [];
+			helpers.each(data.datasets[0].data, function(value, index) {
+				var values = [],
+					strokeColors = [],
+					fillColors = [],
+					highlightFills = [],
+					highlightStrokes = [],
+					bases = [],
+					tops = [];
+				helpers.each(data.datasets, function(dataset, datasetIndex) {
+					values.push(dataset.data[index]);
+					strokeColors.push(dataset.strokeColor);
+					fillColors.push(dataset.fillColor);
+					highlightFills.push(dataset.highlightFill || dataset.fillColor);
+					highlightStrokes.push(dataset.highlightStroke || dataset.strokeColor);
+				});
+
+				this.bars.push(new this.BarClass({
+					values: values,
+					strokeColors: strokeColors,
+					fillColors: fillColors,
+					highlightFills: highlightFills,
+					highlightStrokes: highlightStrokes,
+					labels: this.labelValues,
+					label: data.labels[index]
+				}));
+			}, this);
 
 			this.buildTitle();
 
@@ -129,38 +239,28 @@
 
 			this.BarClass.prototype.base = this.calculateNegative();
 
-			this.eachBars(function(bar, index, datasetIndex){
-				bar.base +=this.calculateStacked(datasetIndex, index);
+			helpers.each(this.bars, function(bar, barIndex) {
+				var bases = [],
+					tops = [];
+				helpers.each(bar.values, function(value, index) {
+					bases.push(this.calculateNegative());
+					tops.push(this.calculateNegative());
+				}, this);
 				helpers.extend(bar, {
-					width : this.scale.calculateBarWidth(this.datasets.length),
-					x: this.scale.calculateBarX(this.datasets.length, 0, index),
-					y: this.calculateNegative() + this.calculateStacked(datasetIndex, index)
+					width : this.scale.calculateBarWidth(1),
+					x: this.scale.calculateBarX(1, 0, barIndex),
+					bases: bases,
+					tops: tops
 				});
 				bar.save();
 			}, this);
 
-			var datasets = [];
-			helpers.each(data.datasets, function(dataset, index) {
-				datasets[data.datasets.length - 1 - index] = dataset;
-			})
-			this.buildLegend(datasets);
+			this.buildLegend(data.datasets);
 
 			this.render();
 		},
 		calculateNegative : function() {
 			return this.options.showNegative ? this.scale.calculateY(0) : this.scale.endPoint;
-		},
-		calculateStacked : function(datasetIndex, barIndex) {
-			if (datasetIndex === 0)
-				return 0;
-			var stackedValue = 0;
-			for (var i = 0; i < datasetIndex; i++) {
-				var bar = this.datasets[i].bars[barIndex];
-				if (bar.hasValue()) {
-					stackedValue += bar.value;
-				}
-			}
-			return this.scale.calculateY(stackedValue);
 		},
 		update : function(){
 			this.scale.update();
@@ -169,34 +269,28 @@
 				activeElement.restore(['fillColor', 'strokeColor']);
 			});
 
-			this.eachBars(function(bar){
+			helpers.each(this.bars, function(bar){
 				bar.save();
 			});
 			this.render();
 		},
-		eachBars : function(callback){
-			helpers.each(this.datasets,function(dataset, datasetIndex){
-				helpers.each(dataset.bars, callback, this, datasetIndex);
-			},this);
-		},
-		getBarsAtEvent : function(e){
-			var barsArray = [],
-				eventPosition = helpers.getRelativePosition(e),
-				datasetIterator = function(dataset){
-					barsArray.push(dataset.bars[barIndex]);
-				},
-				barIndex;
+		getBarAtEvent : function(e){
+			var eventPosition = helpers.getRelativePosition(e),
+				activeBar;
 
-			for (var datasetIndex = 0; datasetIndex < this.datasets.length; datasetIndex++) {
-				for (barIndex = 0; barIndex < this.datasets[datasetIndex].bars.length; barIndex++) {
-					if (this.datasets[datasetIndex].bars[barIndex].inRange(eventPosition.x,eventPosition.y)){
-						helpers.each(this.datasets, datasetIterator);
-						return barsArray;
+			helpers.each(this.bars, function(bar, index) {
+				var isNegative = false;
+				helpers.each(bar.values, function(value, valueIndex){
+					if (value < 0) {
+						isNegative = true;
 					}
+				}, this);
+				if (bar.inRange(eventPosition.x, eventPosition.y, isNegative)) {
+					activeBar = bar;
 				}
-			}
+			}, this);
 
-			return barsArray;
+			return activeBar;
 		},
 		buildScale : function(labels){
 			var self = this;
@@ -260,20 +354,33 @@
 			this.scale = new this.ScaleClass(scaleOptions);
 		},
 		addData : function(valuesArray,label){
-			//Map the values array for each of the datasets
-			helpers.each(valuesArray,function(value,datasetIndex){
-				//Add a new point for each piece of data, passing any required data to draw.
-				this.datasets[datasetIndex].bars.push(new this.BarClass({
-					value : value,
-					label : label,
-					x: this.scale.calculateBarX(this.datasets.length, 0, this.scale.valuesCount+1),
-					y: this.calculateNegative(),
-					width : this.scale.calculateBarWidth(this.datasets.length),
-					base : this.scale.endPoint,
-					strokeColor : this.datasets[datasetIndex].strokeColor,
-					fillColor : this.datasets[datasetIndex].fillColor
-				}));
-			},this);
+			var strokeColors = [],
+				fillColors = [],
+				highlightFills = [],
+				highlightStrokes = [],
+				bases = [],
+				tops = [];
+			helpers.each(data.datasets, function(dataset, datasetIndex) {
+				strokeColors.push(dataset.strokeColor);
+				fillColors.push(dataset.fillColor);
+				highlightFills.push(dataset.highlightFill || dataset.fillColor);
+				highlightStrokes.push(dataset.highlightStroke || dataset.strokeColor);
+			});
+			helpers.each(valuesArray, function(value, index) {
+				bases.push(this.calculateNegative());
+				tops.push(this.calculateNegative());
+			}, this);
+			this.bars.push(new this.BarClass({
+				values: valuesArray,
+				strokeColors: strokeColors,
+				fillColors: fillColors,
+				highlightFills: highlightFills,
+				highlightStrokes: highlightStrokes,
+				width : this.scale.calculateBarWidth(1),
+				x: this.scale.calculateBarX(1, 0, this.bars.length + 1),
+				bases: bases,
+				tops: tops
+			}));
 
 			this.scale.addXLabel(label);
 			//Then re-render the chart.
@@ -282,9 +389,7 @@
 		removeData : function(){
 			this.scale.removeXLabel();
 			//Then re-render the chart.
-			helpers.each(this.datasets,function(dataset){
-				dataset.bars.shift();
-			},this);
+			this.bars.shift();
 			this.update();
 		},
 		reflow : function(){
@@ -309,20 +414,23 @@
 			this.scale.draw(easingDecimal);
 
 			//Draw all the bars for each dataset
-			helpers.each(this.datasets,function(dataset,datasetIndex){
-				helpers.each(dataset.bars,function(bar,index){
-					if (bar.hasValue()){
-						bar.base = this.calculateNegative();
-						//Transition then draw
-						bar.transition({
-							x : this.scale.calculateBarX(this.datasets.length, 0, index),
-							y : this.scale.calculateY(bar.value) + this.calculateStacked(datasetIndex, index),
-							width : this.scale.calculateBarWidth(this.datasets.length)
-						}, easingDecimal).draw();
-					}
-				},this);
+			helpers.each(this.bars, function(bar, barIndex) {
+				if (bar.hasValue()) {
+					var bases = [],
+						tops = [];
+					helpers.each(bar.values, function(value, valueIndex) {
+						bases.push(this.scale.calculateY(bar.getOffsetValue(valueIndex)));
+						tops.push(this.scale.calculateY(bar.getOffsetValue(valueIndex) + value));
+					}, this);
+					bar.transition({
+						bases: bases,
+						tops: tops,
+						width: this.scale.calculateBarWidth(1),
+						x: this.scale.calculateBarX(1, 0, barIndex)
+					}, easingDecimal).draw();
+				}
+			}, this);
 
-			},this);
 			this.legend.draw();
 		}
 	});

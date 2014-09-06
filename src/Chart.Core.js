@@ -1169,7 +1169,13 @@
 		},
 		transition : function(props,ease){
 			each(props,function(value,key){
-				this[key] = ((value - this._saved[key]) * ease) + this._saved[key];
+				if (value instanceof Object) {
+					each(value, function(v, index) {
+						this[key][index] = ((v - this._saved[key][index]) * ease) + this._saved[key][index];
+					}, this);
+				} else {
+					this[key] = ((value - this._saved[key]) * ease) + this._saved[key];
+				}
 			},this);
 			return this;
 		},
@@ -1325,8 +1331,8 @@
 		height : function(){
 			return this.base - this.y;
 		},
-		inRange : function(chartX,chartY){
-			return (chartX >= this.x - this.width/2 && chartX <= this.x + this.width/2) && (chartY >= this.y && chartY <= this.base);
+		inRange : function(chartX,chartY,minus){
+			return (chartX >= this.x - this.width/2 && chartX <= this.x + this.width/2) && ((chartY >= this.y && chartY <= this.base) || (minus && chartY <= this.y && chartY >= this.base));
 		}
 	});
 

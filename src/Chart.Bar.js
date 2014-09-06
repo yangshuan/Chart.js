@@ -172,7 +172,7 @@
 
 			for (var datasetIndex = 0; datasetIndex < this.datasets.length; datasetIndex++) {
 				for (barIndex = 0; barIndex < this.datasets[datasetIndex].bars.length; barIndex++) {
-					if (this.datasets[datasetIndex].bars[barIndex].inRange(eventPosition.x,eventPosition.y)){
+					if (this.datasets[datasetIndex].bars[barIndex].inRange(eventPosition.x,eventPosition.y, this.datasets[datasetIndex].bars[barIndex].value < 0)){
 						helpers.each(this.datasets, datasetIterator);
 						return barsArray;
 					}
